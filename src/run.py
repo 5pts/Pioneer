@@ -1,3 +1,10 @@
+"""Run the frozen two-stage DeepSeek policy-signal classification.
+
+The runner verifies the pre-run lock, loads private local inputs, resumes from
+an append-only JSONL file, and applies the official Level-1 then Level-2
+routing. API keys are read from the environment and are never written here.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -21,6 +28,7 @@ PRINT_LOCK = threading.Lock()
 
 
 def load_dotenv(path: Path) -> None:
+    """Load missing variables from a local, git-ignored ``.env`` file."""
     if not path.exists():
         return
     for line in path.read_text("utf-8").splitlines():
@@ -32,15 +40,18 @@ def load_dotenv(path: Path) -> None:
 
 
 def sha256(path: Path) -> str:
+    """Return an uppercase SHA-256 digest for a local file."""
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def read_csv(path: Path) -> list[dict]:
+    """Read a UTF-8 CSV into dictionaries."""
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
 def build_messages(prompt: str, examples: list[dict], text: str) -> list[dict]:
+    """Construct one chat request from a prompt and few-shot examples."""
     messages = [{"role": "system", "content": prompt}]
     for row in examples:
         messages.append(
@@ -59,6 +70,7 @@ def build_messages(prompt: str, examples: list[dict], text: str) -> list[dict]:
 
 
 def parse_label(content: str | None, allowed: set[str]) -> str | None:
+    """Parse a JSON label, returning ``None`` for out-of-scope responses."""
     try:
         parsed = json.loads(content or "")
         label = str(parsed.get("label", "")).strip().upper()
@@ -76,6 +88,7 @@ def call_api(
     request_seed: int,
     retries: int = 7,
 ) -> dict:
+    """Call the API with bounded exponential backoff and deterministic jitter."""
     payload = {
         "model": protocol["model"],
         "messages": messages,
@@ -109,6 +122,7 @@ def call_api(
                 "usage": data.get("usage") or {},
             }
         except urllib.error.HTTPError as error:
+            # Retry only transient failures. Permanent client errors fail fast.
             retryable = error.code in {408, 409, 429, 500, 502, 503, 504}
             if not retryable or attempt + 1 == retries:
                 raise RuntimeError(f"HTTP {error.code}") from error
@@ -124,6 +138,7 @@ def call_api(
 
 
 def route_final(level1: str | None, level2: str | None) -> str | None:
+    """Convert two-stage predictions into the final policy-signal label."""
     if level1 == "W":
         return level2 if level2 in LEVEL2_LABELS else None
     if level1 in {"R", "N"}:
@@ -132,6 +147,7 @@ def route_final(level1: str | None, level2: str | None) -> str | None:
 
 
 def latest_successful_ids(path: Path) -> set[str]:
+    """Return completed sample IDs from an append-only prediction file."""
     if not path.exists():
         return set()
     latest: dict[str, dict] = {}
@@ -155,6 +171,7 @@ def run_one(
     level1_examples: list[dict],
     level2_examples: list[dict],
 ) -> dict:
+    """Classify one row and retain both stages for later decomposition."""
     result = {
         **row,
         "requested_model": protocol["model"],
@@ -177,6 +194,8 @@ def run_one(
             request_seed=seed_base,
         )
         result["level1"] = level1
+        # All gold-W rows receive Level 2 for oracle analysis. Other rows
+        # receive it only when the model itself routes them through W.
         needs_level2 = row["level2_eval"] == "1" or (
             row["final_eval"] == "1" and level1["prediction"] == "W"
         )
@@ -204,6 +223,7 @@ def run_one(
 
 
 def main() -> None:
+    """Verify the lock, resume pending rows, and stream predictions to JSONL."""
     audit = json.loads(
         (PROJECT / "data" / "processed" / "audit_report.json").read_text("utf-8")
     )
@@ -232,6 +252,7 @@ def main() -> None:
 
     output = PROJECT / "results" / "raw" / "formal_predictions.jsonl"
     output.parent.mkdir(parents=True, exist_ok=True)
+    # Successful rows are skipped on restart; failed rows remain retryable.
     done = latest_successful_ids(output)
     pending = [row for row in rows if row["sample_id"] not in done]
     print(

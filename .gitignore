@@ -1,0 +1,23 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# CAPC-CG is gated and may not be redistributed.
+data/
+results/raw/
+results/summary/formal_errors.csv
+
+# Local run locks include row-level source-file hashes and are not needed
+# in the shareable reproducibility package.
+config/frozen_manifest.json
+config/execution_lock.json
+
+# LaTeX build files
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz
+report/docx_render/
+

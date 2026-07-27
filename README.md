@@ -1,84 +1,100 @@
-# Temporal Generalization in Chinese Policy-Signal Classification
+# CAPC-CG Temporal Generalization — Code
 
-This repository contains the code and aggregate results for a frozen
-evaluation of DeepSeek on the human-labeled portion of CAPC-CG.
+This repository contains only the Python code used for a two-stage temporal
+generalization experiment on the gated CAPC-CG policy corpus.
 
-## Research question
+No dataset text, prompt examples, API responses, row-level predictions,
+research results, or report files are included.
 
-When DeepSeek receives recent human-labeled examples, does its five-signal
-classification performance decline on earlier Chinese central-government
-directives?
+## What the code does
 
-## Design
+The pipeline tests whether a fixed DeepSeek classifier behaves differently on
+recent and earlier Chinese central-government policy directives.
 
-- Model: `deepseek-v4-pro`
-- Official CAPC-CG two-stage workflow:
-  - Level 1: affirmative directive (W), prohibition (R), or no directive (N)
-  - Level 2 for W: Black (B), Yellow (Y), Charcoal (C), or Grey (G)
-- Prompt: based on Appendix D of the CAPC-CG paper
-- Few-shot examples: 17 recent human-gold training examples
-- Development set: none
-- Prompt/evaluation text overlap: 0
-- Prompt/evaluation document overlap: 0
-- Evaluation: all eligible, metadata-matched, conflict-free human-gold rows
-- Evaluation population: 1,584 rows across 624 policy documents
-- End-to-end test: 381 recent and 925 earlier directives
-- Primary metric: label-standardized accuracy
-- Uncertainty: 10,000 label-stratified document-cluster bootstrap repetitions
+1. `src/prepare.py` builds a leakage-free evaluation census from an authorized
+   local CAPC-CG copy.
+2. `src/audit.py` verifies class balance, time ranges, unique IDs, and zero
+   prompt/evaluation text or document overlap.
+3. `src/lock.py` freezes hashes before predictions exist.
+4. `src/run.py` performs the official two-stage classification:
+   - Level 1: affirmative directive (W), prohibition (R), or no directive (N)
+   - Level 2 for W: Black (B), Yellow (Y), Charcoal (C), or Grey (G)
+5. `src/evaluate.py` computes end-to-end and stage-specific metrics and runs a
+   label-stratified document-cluster bootstrap.
 
-## Result
+## Repository contents
 
-Recent label-standardized accuracy was 0.555. Earlier accuracy was 0.544.
-The recent-minus-earlier difference was +0.010, with a 95% cluster-bootstrap
-interval of [-0.053, +0.099]. The experiment therefore did not find reliable
-evidence of lower performance on earlier policy language.
+```text
+src/
+  prepare.py     Build the formal evaluation inputs
+  audit.py       Validate inputs and leakage controls
+  lock.py        Freeze pre-run file hashes
+  run.py         Execute resumable DeepSeek predictions
+  evaluate.py    Compute metrics and uncertainty
+tests/
+  test_run.py
+  test_metrics.py
+requirements.txt
+```
 
-The stage decomposition was more informative. Level-1 directive screening
-was better on recent text, while oracle-routed Level-2 signal classification
-was better on earlier text. Temporal generalization was stage-specific.
+## Private local inputs
 
-## Repository map
+The scripts expect the following files locally. They are intentionally excluded
+from GitHub:
 
-- `src/prepare.py`: constructs the locked evaluation census and few-shot sets
-- `src/lock.py`: records pre-run hashes
-- `src/run.py`: executes the two-stage DeepSeek classification
-- `src/audit.py`: checks routing, completeness, duplicates, hashes, and secrets
-- `src/evaluate.py`: computes metrics and document-cluster bootstrap intervals
-- `tests/`: unit tests for output parsing, routing, and metrics
-- `config/protocol.json`: frozen confirmatory protocol
-- `config/prompts.json`: prompt definitions
-- `results/summary/formal_metrics.json`: aggregate formal results
-- `report/main.tex`: complete research report
+```text
+.env
+config/protocol.json
+config/prompts.json
+data/processed/
+results/
+../external_corpora/capc-cg-v1.0/
+```
 
-## Reproduction
+The `.env` file should contain:
 
-Create a Python environment, install the dependencies, and add a local
-`.env` file with the required API and dataset credentials. Then run:
+```text
+DEEPSEEK_API_KEY=your_key_here
+```
+
+Never commit the API key or any gated CAPC-CG content.
+
+## Run order
+
+Install Python 3.11 or newer and the dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+After placing authorized inputs in the expected local paths:
 
 ```powershell
 python src/prepare.py
+python src/audit.py
 python src/lock.py
 python src/run.py
 python src/audit.py
 python src/evaluate.py
+```
+
+Run the unit tests with:
+
+```powershell
 python -m unittest discover -s tests -v
 ```
 
-The preparation step expects an authorized local copy of CAPC-CG in the path
-configured by the script. Do not commit `.env` or generated row-level files.
+## Safety and reproducibility
 
-## Data access and licensing
+- The prediction file is append-only, so interrupted API runs can resume.
+- Invalid model outputs count as classification errors.
+- Transient API failures use bounded retry logic.
+- Prompt texts and their source documents are excluded from evaluation.
+- Document-cluster bootstrap sampling respects within-document dependence.
+- The execution lock prevents post-result changes from being presented as
+  preregistered choices.
 
-CAPC-CG is a gated dataset intended for non-commercial research. This
-repository does **not** redistribute policy text, human-labeled prompt
-examples, raw model responses, or row-level error files. Request access from
-the [CAPC-CG dataset page](https://huggingface.co/datasets/Baron-Sun/CAPC-CG_V1.0)
+CAPC-CG is a gated dataset for non-commercial research. Request access from
+the [dataset page](https://huggingface.co/datasets/Baron-Sun/CAPC-CG_V1.0)
 and cite the [ACL 2026 paper](https://aclanthology.org/2026.acl-long.42/).
-
-## Integrity
-
-The protocol, prompt, code, and evaluation manifest were hashed before the
-prediction file existed. The final run had zero API errors, invalid outputs,
-missing required outputs, duplicate identifiers, routing mismatches, or
-locked-file hash mismatches.
 

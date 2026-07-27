@@ -1,3 +1,5 @@
+"""Unit tests for prompt serialization, label parsing, and two-stage routing."""
+
 from __future__ import annotations
 
 import sys
@@ -18,6 +20,7 @@ from run import (  # noqa: E402
 
 
 class RunTests(unittest.TestCase):
+    """Check the deterministic parts of the API runner."""
     def test_parse_json_labels(self) -> None:
         self.assertEqual(parse_label('{"label":"W"}', LEVEL1_LABELS), "W")
         self.assertEqual(parse_label('{"label":"C"}', LEVEL2_LABELS), "C")

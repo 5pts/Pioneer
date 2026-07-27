@@ -1,3 +1,10 @@
+"""Evaluate the completed two-stage prediction run.
+
+This module computes end-to-end and stage-specific metrics, estimates the
+recent-minus-earlier gap with a label-stratified document-cluster bootstrap,
+and writes aggregate and error-analysis outputs.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -15,6 +22,7 @@ LEVEL1_LABELS = ("W", "R", "N")
 
 
 def load_latest(path: Path) -> list[dict]:
+    """Load the latest JSONL record for each sample after a resumable run."""
     latest: dict[str, dict] = {}
     for line in path.read_text("utf-8").splitlines():
         if line.strip():
@@ -24,6 +32,7 @@ def load_latest(path: Path) -> list[dict]:
 
 
 def nested_prediction(row: dict, key: str) -> str | None:
+    """Read a prediction stored either at row level or inside Level 1."""
     if key == "level1_prediction":
         return (row.get("level1") or {}).get("prediction")
     return row.get(key)
@@ -36,6 +45,11 @@ def classification_metrics(
     gold_key: str,
     prediction_key: str,
 ) -> dict:
+    """Compute confusion-based metrics, counting invalid outputs as errors.
+
+    Label-standardized accuracy is mean per-label recall. It gives every policy
+    signal equal weight even when label frequencies differ between periods.
+    """
     other = "__OTHER__"
     prediction_labels = labels + (other,)
     confusion = {
@@ -123,6 +137,7 @@ def classification_metrics(
 
 
 def percentile(values: list[float], probability: float) -> float:
+    """Return a linearly interpolated empirical percentile."""
     ordered = sorted(values)
     position = (len(ordered) - 1) * probability
     lower = int(position)
@@ -136,6 +151,7 @@ def stratified_document_sample(
     labels: tuple[str, ...],
     rng: random.Random,
 ) -> list[dict]:
+    """Resample document clusters separately within each gold label."""
     by_label_document: dict[str, dict[str, list[dict]]] = {
         label: defaultdict(list) for label in labels
     }
@@ -158,6 +174,7 @@ def cluster_bootstrap_gap(
     repetitions: int,
     seed: int,
 ) -> dict:
+    """Estimate recent-minus-earlier metric gaps with clustered bootstrapping."""
     rng = random.Random(seed)
     gaps = {
         "label_standardized_accuracy": [],
@@ -202,6 +219,7 @@ def cluster_bootstrap_gap(
 
 
 def error_stage(row: dict) -> str:
+    """Identify whether an end-to-end error began at Level 1 or Level 2."""
     level1 = (row.get("level1") or {}).get("prediction")
     if level1 != row.get("gold_level1"):
         return "level1"
@@ -213,6 +231,7 @@ def error_stage(row: dict) -> str:
 
 
 def token_usage(rows: list[dict]) -> dict:
+    """Aggregate API token accounting across both classification stages."""
     totals: Counter = Counter()
     for row in rows:
         for stage in ("level1", "level2"):
@@ -229,10 +248,12 @@ def token_usage(rows: list[dict]) -> dict:
 
 
 def sha256(path: Path) -> str:
+    """Return an uppercase SHA-256 digest for a local file."""
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def main() -> None:
+    """Validate run completeness, compute metrics, and write final summaries."""
     protocol = json.loads((PROJECT / "config" / "protocol.json").read_text("utf-8"))
     frozen = json.loads(
         (PROJECT / "config" / "frozen_manifest.json").read_text("utf-8")
@@ -277,6 +298,7 @@ def main() -> None:
         "periods": {},
     }
 
+    # Compute the same metric family independently in each time period.
     for period in ("recent", "earlier"):
         period_rows = [row for row in rows if row["period"] == period]
         final_rows = [row for row in period_rows if row["final_eval"] == "1"]
@@ -331,6 +353,7 @@ def main() -> None:
             "macro_f1",
         )
     }
+    # Bootstrap only the confirmatory end-to-end five-class scope.
     summary["uncertainty"] = cluster_bootstrap_gap(
         recent_final,
         earlier_final,

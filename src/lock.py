@@ -1,3 +1,10 @@
+"""Freeze code and input hashes immediately before formal prediction.
+
+The lock refuses to run after predictions exist. This shows that the protocol,
+prompts, evaluation census, and analysis code were not changed after model
+outputs became available.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -10,10 +17,12 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 
 def sha256(path: Path) -> str:
+    """Return an uppercase SHA-256 digest for a local file."""
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def main() -> None:
+    """Create the pre-run execution lock after the data audit passes."""
     raw = PROJECT / "results" / "raw" / "formal_predictions.jsonl"
     if raw.exists() and raw.stat().st_size:
         raise RuntimeError("Predictions already exist; refusing to create a pre-run lock.")
@@ -23,6 +32,7 @@ def main() -> None:
     if audit.get("status") != "PASS":
         raise RuntimeError("Data audit has not passed.")
 
+    # Freeze every artifact that can influence predictions or evaluation.
     files = [
         "config/protocol.json",
         "config/prompts.json",

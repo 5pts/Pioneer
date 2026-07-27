@@ -1,0 +1,387 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{threeparttable}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.65em}
+\setlist{nosep,leftmargin=1.5em}
+\renewcommand{\arraystretch}{1.15}
+
+\title{\textbf{Does Policy Language Travel Across Time?}\\
+\large A Two-Stage Evaluation of DeepSeek on Chinese Central-Government Directives}
+\author{Jinhong Lin}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Policy language changes as governments change their priorities, institutions, and ways of giving instructions. A model that works on recent policy documents may therefore work less well on older documents. This study tests that possibility with CAPC-CG, a corpus of Chinese central-government policy documents with human labels for five policy signals. DeepSeek received 17 recent, human-labeled examples and classified every eligible human-gold paragraph in a frozen evaluation set. The experiment followed the corpus's official two-stage design. The model first decided whether a paragraph contained an affirmative directive, a prohibitive directive, or no directive. It then classified affirmative directives as Black, Yellow, Charcoal, or Grey. The primary measure was label-standardized accuracy, which gives each of the five final labels equal weight. Recent accuracy was 0.555 and earlier accuracy was 0.544. The difference was 0.010, with a 95\% document-cluster bootstrap interval from $-0.053$ to $0.099$. The data therefore do not show a reliable decline on earlier policy language. However, the two stages behaved differently. Recent text was easier at directive screening, while earlier text was slightly easier at fine-grained signal classification. The main finding is not that time never matters. It is that temporal generalization in policy NLP is stage-specific rather than one uniform problem.
+\end{abstract}
+
+\section{Introduction}
+
+Imagine giving a student examples of how teachers write rules today and then asking the student to interpret rules written thirty years ago. The topic may be familiar, but the wording, level of pressure, and institutional style may differ. A language model faces the same problem when it uses recent examples to classify older policy documents.
+
+This matters for public-policy research because automated text analysis is often used to compare governments across long periods. If a classifier understands one period better than another, an apparent historical change in policy may partly be a measurement error. A researcher could conclude that older governments used fewer forceful or flexible directives when the model simply had more difficulty reading their language.
+
+This study asks one focused question:
+
+\begin{quote}
+\textbf{When DeepSeek is prompted with recent human-labeled examples, does its five-signal classification performance decline on earlier Chinese central-government directives?}
+\end{quote}
+
+The test uses CAPC-CG, a large corpus built to measure how Chinese central-government documents communicate policy instructions \cite{sun2026}. Its five signals describe different ways of directing government action: neutral authorization, urgent enforcement, flexible implementation, ambiguous discretion, and prohibition. These distinctions turn an abstract idea---the style and authority of policy language---into labels that a model can be tested against.
+
+The preregistered expectation was that recent examples would fit recent language better than earlier language. The formal result does not support that expectation. End-to-end performance was almost the same across periods. Yet the model's two decisions showed different time patterns. The model screened recent directives more accurately, but classified the fine-grained signal of earlier affirmative directives slightly more accurately. This decomposition is the study's main contribution.
+
+\section{Background and Research Gap}
+
+\subsection{Policy signals as a public-policy problem}
+
+Policy documents do more than state goals. They also tell public agencies how much freedom they have and how strongly they are expected to act. Ang's theory of adaptive policy communication describes a five-color system that ranges from authorization and flexibility to ambiguity, pressure, and prohibition \cite{ang2024}. CAPC-CG operationalizes this theory as a paragraph-level classification task over Chinese central-government documents \cite{sun2026}.
+
+The final labels are:
+
+\begin{itemize}
+    \item \textbf{Black (B):} a clear but neutral affirmative directive.
+    \item \textbf{Yellow (Y):} an affirmative directive with pressure, urgency, strict implementation, or accountability.
+    \item \textbf{Charcoal (C):} an affirmative directive that allows local adaptation, pilots, feedback, or multiple implementation paths.
+    \item \textbf{Grey (G):} an ambiguous, conditional, optional, or weakly specified affirmative directive.
+    \item \textbf{Red (R):} a prohibition or punishment for prohibited government conduct.
+\end{itemize}
+
+These signals can be studied in any policy field, including education. For example, an education directive may order every locality to meet a target, allow local pilot programs, or merely encourage action where conditions permit. The present experiment does not isolate education documents, so its claim is about general central-government policy language. Its method can later support a focused study of education governance.
+
+\subsection{Temporal generalization in NLP}
+
+Automated content analysis must be validated against human judgment, because a model can produce systematic and substantively misleading errors \cite{grimmer2013}. Time creates an additional risk. Language, topics, and label meanings can shift, causing performance to change between a model's reference period and its target period. Prior work has documented temporal degradation in language modeling and document classification \cite{lazaridou2021,luu2022,huang2019}. Studies in legal and biomedical classification also show that temporal concept drift can affect downstream predictions \cite{chalkidis2022}.
+
+The effect is not guaranteed to be uniform. Temporal adaptation sometimes helps less than ordinary domain adaptation, and performance patterns can vary by task \cite{rottger2021}. Random train--test splits may also hide these problems by mixing periods and making the test set too similar to the training set \cite{sogaard2021}.
+
+\subsection{Gap and contribution}
+
+CAPC-CG shows that language models can recover policy-signal labels, but the question here is different: does a fixed prompt based on recent examples travel backward in time? Existing temporal NLP studies do not answer this for strategic Chinese policy language. More importantly, a single end-to-end score can hide where a time difference occurs.
+
+This study contributes:
+
+\begin{enumerate}
+    \item a frozen recent-versus-earlier evaluation on human-gold CAPC-CG data;
+    \item a label-balanced outcome that is not driven by changing class frequencies;
+    \item document-level uncertainty estimates; and
+    \item a decomposition that separates directive screening from fine-grained signal classification.
+\end{enumerate}
+
+\section{Hypothesis}
+
+The confirmatory hypothesis was:
+
+\begin{quote}
+\textbf{H1:} End-to-end label-standardized accuracy will be higher for recent directives than for earlier directives.
+\end{quote}
+
+The direction was defined as recent minus earlier. A positive difference would support H1. The protocol required reporting the point estimate and confidence interval even if the result was small, reversed, or statistically uncertain. Prompts, exclusions, metrics, and the model were frozen before predictions were observed.
+
+\section{Data}
+
+\subsection{Corpus}
+
+CAPC-CG contains roughly 3.3 million paragraphs from Chinese central-government policy documents published between 1949 and 2023 \cite{sun2026}. The corpus provides machine labels at scale and a smaller expert-labeled subset. Only the human-gold subset was used for evaluation in this study. Machine-generated labels were not treated as ground truth.
+
+The available human-gold annotations follow two tasks:
+
+\begin{itemize}
+    \item \textbf{Level 1:} W for an affirmative government directive, R for a prohibitive directive, and N for no government directive.
+    \item \textbf{Level 2:} B, Y, C, or G for paragraphs already identified as W.
+\end{itemize}
+
+For the final five-class outcome, a Level-1 R prediction becomes Red. A Level-1 W prediction is sent to Level 2 and becomes B, Y, C, or G. A Level-1 N prediction on a gold five-class directive is counted as an error.
+
+\subsection{Time split and sample construction}
+
+The preregistered recent period was 2013--2023, and the earlier period was 1979--2012. After matching the human-gold annotations to corpus metadata, the available recent gold documents ended in 2022. Therefore, the observed ranges were 2013--2022 and 1979--2012.
+
+The evaluation used every metadata-matched, conflict-free human-gold row that remained after excluding the prompt texts and all documents used in the prompt. This produced 1,584 distinct evaluation rows from 624 source documents. The end-to-end five-class analysis included 381 recent directives and 925 earlier directives. The Level-1 test included 52 recent and 409 earlier paragraphs. The oracle-routed Level-2 test included 362 recent and 778 earlier affirmative directives.
+
+No evaluation text appeared in the prompt, and no evaluation paragraph came from a prompt document. There was no development set. Some gold texts matched multiple source documents within the same period. These cases do not alter the recent-versus-earlier assignment, but exact document metadata may be uncertain for 173 evaluation rows.
+
+\begin{table}[ht]
+\centering
+\caption{End-to-end gold-label distribution}
+\label{tab:distribution}
+\begin{threeparttable}
+\begin{tabular}{lrrrrrr}
+\toprule
+Period & B & Y & C & G & R & Total \\
+\midrule
+Recent, 2013--2022 & 17 & 124 & 163 & 58 & 19 & 381 \\
+Earlier, 1979--2012 & 190 & 214 & 164 & 210 & 147 & 925 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}[flushleft]\footnotesize
+\item The small recent B and R groups limit the precision of label-balanced comparisons.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+\section{Method}
+
+\subsection{Model and prompt}
+
+The experiment used \texttt{deepseek-v4-pro} through the DeepSeek API. Temperature was 0, reasoning mode was disabled, and the output was limited to a short JSON label. One returned model name and one system fingerprint were observed throughout the run.
+
+The instructions were based on Appendix D of the CAPC-CG paper \cite{sun2026}. Only the output format was changed to JSON so that responses could be parsed consistently. The prompt contained 17 recent examples drawn only from human-gold training rows:
+
+\begin{itemize}
+    \item three examples for each Level-1 label W, R, and N; and
+    \item two examples for each Level-2 label B, Y, C, and G.
+\end{itemize}
+
+These are \emph{few-shot} examples: the model sees a small number of solved cases inside the prompt before classifying a new paragraph. The model was not fine-tuned, and the experiment does not assume that its pretraining data were recent or historically limited.
+
+\subsection{Two-stage prediction}
+
+Each Level-1 test paragraph received one W, R, or N prediction. For the end-to-end five-class task, every gold affirmative paragraph was also sent to Level 2. This design permits two views:
+
+\begin{enumerate}
+    \item \textbf{End-to-end performance:} uses the model's own Level-1 route and therefore includes screening errors.
+    \item \textbf{Oracle-routed Level-2 performance:} sends every gold-W paragraph directly to Level 2 and measures color classification without Level-1 routing errors.
+\end{enumerate}
+
+This is analogous to checking a two-door system. The first score asks whether a person reaches the correct final room. The decomposition separately checks whether the person chose the correct first door and whether the sign inside that door was interpreted correctly.
+
+\subsection{Measures}
+
+The primary outcome was \textbf{label-standardized accuracy}, defined as the mean recall across the five final labels:
+
+\[
+\text{Standardized accuracy}
+=\frac{1}{5}\sum_{\ell \in \{B,Y,C,G,R\}}
+\frac{\text{correct predictions for }\ell}{\text{gold examples of }\ell}.
+\]
+
+This measure gives each label equal weight. It is important because the recent and earlier groups have different label distributions. Overall accuracy, macro-F1, Cohen's kappa, and per-label results were secondary measures.
+
+Uncertainty was estimated with 10,000 bootstrap repetitions. Source documents were resampled with replacement within each period and gold label. Clustering by document respects the fact that paragraphs from the same document may be related. The reported interval is the 2.5th to 97.5th percentile of the recent-minus-earlier bootstrap distribution.
+
+\subsection{Integrity checks}
+
+The protocol, prompt, code, and evaluation manifest were hashed before the prediction file existed. The completed run had:
+
+\begin{itemize}
+    \item zero API errors;
+    \item zero invalid or missing Level-1 outputs;
+    \item zero missing required Level-2 outputs;
+    \item zero duplicate sample identifiers;
+    \item zero routing mismatches; and
+    \item zero mismatches against the locked pre-run hashes.
+\end{itemize}
+
+The run used 3,437,688 tokens in total, including 3,003,392 cached prompt tokens.
+
+\section{Results}
+
+\subsection{Primary result}
+
+Recent end-to-end label-standardized accuracy was 0.555. Earlier accuracy was 0.544. The recent-minus-earlier difference was 0.010, or 1.0 percentage point. Its 95\% document-cluster bootstrap interval was $[-0.053, 0.099]$, and the two-sided bootstrap sign $p$-value was 0.698.
+
+The interval includes both a modest recent advantage and a modest earlier advantage. The result therefore does not provide reliable evidence that DeepSeek performs worse on earlier policy language.
+
+\begin{table}[ht]
+\centering
+\caption{End-to-end five-class performance}
+\label{tab:main}
+\begin{threeparttable}
+\begin{tabular}{lrrrr}
+\toprule
+Period & $n$ & Overall accuracy & Standardized accuracy & Macro-F1 \\
+\midrule
+Recent & 381 & 0.541 & 0.555 & 0.567 \\
+Earlier & 925 & 0.532 & 0.544 & 0.599 \\
+\midrule
+Recent $-$ earlier & & 0.009 & 0.010 & $-0.032$ \\
+95\% bootstrap interval & & $[-0.061,0.079]$ & $[-0.053,0.099]$ & $[-0.095,0.028]$ \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}[flushleft]\footnotesize
+\item Standardized accuracy is the mean recall across B, Y, C, G, and R. Intervals use 10,000 label-stratified document-cluster bootstrap repetitions.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+Overall accuracy told the same story. It was 0.541 for recent directives and 0.532 for earlier directives, a difference of 0.009 with a 95\% interval of $[-0.061,0.079]$. Macro-F1 was slightly lower in the recent period, but its difference was also uncertain.
+
+\subsection{Per-label performance}
+
+The aggregate result hides large differences between labels. Red was the easiest recent label, with recall 0.947. Grey had low recall in both periods. Recent Black recall was 0.412, but this estimate rests on only 17 examples. Earlier label recalls were more even.
+
+\begin{table}[ht]
+\centering
+\caption{End-to-end recall by gold label}
+\label{tab:perlabel}
+\begin{tabular}{lrrrrr}
+\toprule
+Period & B & Y & C & G & R \\
+\midrule
+Recent & 0.412 & 0.573 & 0.583 & 0.259 & 0.947 \\
+Earlier & 0.495 & 0.589 & 0.616 & 0.329 & 0.694 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Stage decomposition}
+
+The two stages showed opposite patterns. Level-1 standardized accuracy was 0.937 on recent text and 0.799 on earlier text. The model was better at deciding whether recent paragraphs contained affirmative, prohibitive, or no government directive.
+
+The pattern reversed in the oracle-routed Level-2 test. Standardized accuracy was 0.606 for recent affirmative directives and 0.648 for earlier affirmative directives. Once the correct paragraphs reached the color classifier, earlier text was slightly easier.
+
+\begin{table}[ht]
+\centering
+\caption{Performance by classification stage}
+\label{tab:stages}
+\begin{tabular}{llrrr}
+\toprule
+Task & Period & $n$ & Standardized accuracy & Macro-F1 \\
+\midrule
+Level 1: W/R/N & Recent & 52 & 0.937 & 0.918 \\
+ & Earlier & 409 & 0.799 & 0.794 \\
+\addlinespace
+Oracle Level 2: B/Y/C/G & Recent & 362 & 0.606 & 0.537 \\
+ & Earlier & 778 & 0.648 & 0.646 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The error counts support this explanation. Among the 381 recent end-to-end cases, 53 errors occurred at Level 1 and 122 at Level 2. Among the 925 earlier cases, 225 errors occurred at Level 1 and 208 at Level 2. Earlier text created more screening errors, but not more fine-grained color errors. The opposing effects largely canceled in the final score.
+
+\section{Discussion}
+
+\subsection{Answer to the research question}
+
+The formal experiment did not support H1. DeepSeek's end-to-end performance did not reliably decline on earlier directives. The point estimate favored recent text by only one percentage point, and the uncertainty interval comfortably crossed zero.
+
+This is a meaningful null result, not a failed experiment. The study began with a clear prediction, froze the design before observing outputs, evaluated the full eligible human-gold set, and retained the result when it did not match the expected story. A small pilot had suggested a much larger recent advantage. The full census showed that the pilot estimate was not stable and should not be used as the paper's result.
+
+\subsection{Why the stage result matters}
+
+The most useful finding is that ``difficulty across time'' is not one thing. DeepSeek had two jobs:
+
+\begin{enumerate}
+    \item find the presence and direction of government authority; and
+    \item interpret the style of an affirmative instruction.
+\end{enumerate}
+
+Recent language was easier for the first job, while earlier language was not harder for the second. If only the final score were reported, these mechanisms would remain invisible.
+
+For public-policy researchers, this means a temporal validation should follow the structure of the measurement process. If a study counts flexible education directives over time, it should check both whether older directives enter the classifier correctly and whether their flexibility is labeled correctly. A historical trend can be distorted at either step.
+
+\subsection{Substantive interpretation}
+
+The result does not show that Chinese policy language stayed constant. It shows that any historical linguistic change did not produce a clear end-to-end loss for this model, prompt, and task. Several explanations remain possible. The label definitions may capture stable features across periods. DeepSeek's pretraining may include older policy language. Earlier directives may differ, but not in a way that hurts the final classification. Finally, temporal advantages at one stage may cancel disadvantages at another.
+
+The study therefore supports a more precise claim:
+
+\begin{quote}
+\textbf{Temporal generalization in policy-signal classification is stage-specific. Recent policy language was easier for directive screening, but not for fine-grained signal classification.}
+\end{quote}
+
+\section{Limitations}
+
+First, the study uses one model and one fixed prompt. Results may differ for other models, prompt wording, or fine-tuned classifiers.
+
+Second, the matched recent sample contains only 17 Black and 19 Red paragraphs after prompt-document exclusion. Label standardization prevents these groups from being ignored, but their recall estimates are imprecise.
+
+Third, the recent matched gold data end in 2022 even though the full corpus extends to 2023. The result therefore does not directly test the newest corpus year.
+
+Fourth, model pretraining data are unknown. The 17 prompt examples are the experiment's visible supervision, but the model cannot be described as learning only from those examples.
+
+Fifth, 173 rows have more than one possible same-period metadata match. The period comparison remains valid, but exact document-level metadata for those rows should be interpreted cautiously.
+
+Sixth, this is a test of predictive performance, not direct proof of historical language change. A nonsignificant gap is not evidence that policy language never changes.
+
+Finally, the corpus covers central-government policy generally. Education is an important application, but an education-specific claim would require a transparent subject filter and a new locked evaluation.
+
+\section{Ethics and Reproducibility}
+
+The experiment analyzes public policy text and does not use personal or sensitive human-subject data. However, automated labels should not replace historical or institutional interpretation. They are measurement tools whose errors can affect substantive conclusions.
+
+The reproducibility package contains the frozen protocol, prompt definitions, analysis code, tests, aggregate metrics, and this report. CAPC-CG is a gated, non-commercial research dataset. Its text, the human-labeled prompt examples, raw predictions containing policy text, and row-level error files are not redistributed. Researchers with authorized access can run the preparation and prediction scripts locally.
+
+\section{Conclusion}
+
+This study tested whether a DeepSeek classifier guided by recent examples performs worse on earlier Chinese central-government directives. It did not. Recent standardized accuracy was 0.555, earlier accuracy was 0.544, and the one-point gap was statistically uncertain.
+
+The deeper result came from opening the two-stage pipeline. Recent paragraphs were easier to screen for directive type, but earlier affirmative directives were slightly easier to classify by policy signal. Time affected different parts of the task in different directions.
+
+The practical lesson is simple: researchers should not ask only whether an NLP model ``works across time.'' They should ask which decision in the measurement process changes across time. That approach produces a more honest and useful account of what the model understands.
+
+\begin{thebibliography}{9}
+
+\bibitem{ang2024}
+Yuen Yuen Ang.
+\newblock Ambiguity and clarity in China's adaptive policy communication.
+\newblock \emph{The China Quarterly}, 257:20--37, 2024.
+\newblock \url{https://doi.org/10.1017/S0305741023000826}.
+
+\bibitem{chalkidis2022}
+Ilias Chalkidis and Anders S{\o}gaard.
+\newblock Improved multi-label classification under temporal concept drift: Rethinking group-robust algorithms in a label-wise setting.
+\newblock In \emph{Findings of ACL 2022}, pages 2441--2454, 2022.
+\newblock \url{https://aclanthology.org/2022.findings-acl.192/}.
+
+\bibitem{grimmer2013}
+Justin Grimmer and Brandon M. Stewart.
+\newblock Text as data: The promise and pitfalls of automatic content analysis methods for political texts.
+\newblock \emph{Political Analysis}, 21(3):267--297, 2013.
+\newblock \url{https://doi.org/10.1093/pan/mps028}.
+
+\bibitem{huang2019}
+Xiaolei Huang and Michael J. Paul.
+\newblock Neural temporality adaptation for document classification: Diachronic word embeddings and domain adaptation models.
+\newblock In \emph{Proceedings of ACL 2019}, pages 4113--4123, 2019.
+\newblock \url{https://aclanthology.org/P19-1403/}.
+
+\bibitem{lazaridou2021}
+Angeliki Lazaridou, Adhiguna Kuncoro, Elena Gribovskaya, Devendra Singh Sachan, and others.
+\newblock Mind the gap: Assessing temporal generalization in neural language models.
+\newblock In \emph{Advances in Neural Information Processing Systems 34}, 2021.
+\newblock \url{https://proceedings.neurips.cc/paper/2021/hash/f5bf0ba0a17ef18f9607774722f5698c-Abstract.html}.
+
+\bibitem{luu2022}
+Kelvin Luu, Daniel Khashabi, Suchin Gururangan, Karishma Mandyam, and Noah A. Smith.
+\newblock Time waits for no one! Analysis and challenges of temporal misalignment.
+\newblock In \emph{Proceedings of NAACL 2022}, pages 5944--5958, 2022.
+\newblock \url{https://aclanthology.org/2022.naacl-main.435/}.
+
+\bibitem{rottger2021}
+Paul R{\"o}ttger and Janet B. Pierrehumbert.
+\newblock Temporal adaptation of BERT and performance on downstream document classification: Insights from social media.
+\newblock In \emph{Findings of EMNLP 2021}, pages 2400--2412, 2021.
+\newblock \url{https://aclanthology.org/2021.findings-emnlp.206/}.
+
+\bibitem{sogaard2021}
+Anders S{\o}gaard, Sebastian Ebert, Jo{\~a}o Sedoc, and others.
+\newblock We need to talk about random splits.
+\newblock In \emph{Proceedings of EACL 2021}, pages 1823--1832, 2021.
+\newblock \url{https://aclanthology.org/2021.eacl-main.156/}.
+
+\bibitem{sun2026}
+Baron Sun, Alex Jinhan Zhou, Chuyuan Zheng, and Yuen Yuen Ang.
+\newblock CAPC-CG: A corpus of Chinese central government documents with policy signal annotations.
+\newblock In \emph{Proceedings of ACL 2026}, 2026.
+\newblock \url{https://aclanthology.org/2026.acl-long.42/}.
+
+\end{thebibliography}
+
+\end{document}
+

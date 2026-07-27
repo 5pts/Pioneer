@@ -1,10 +1,16 @@
 .env
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+*.log
 
-# Private configuration, gated data, and generated outputs.
-config/
+# Run-specific locks and manifests.
+config/execution_lock.json
+config/frozen_manifest.json
+
+# Gated data and generated outputs.
 data/
 results/
 report/

@@ -1,3 +1,10 @@
+"""Build a leakage-free temporal evaluation census from authorized CAPC-CG data.
+
+The script reads the gated human-label files, removes conflicting annotations,
+matches paragraphs to document metadata, samples recent few-shot examples, and
+excludes all prompt texts and prompt documents from formal evaluation.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -24,18 +31,21 @@ USER_PREFIX = "待判断政策段落："
 
 
 def normalize_text(value: str) -> str:
+    """Normalize Unicode and whitespace for conflicts and stable identifiers."""
     value = unicodedata.normalize("NFKC", str(value or ""))
     value = value.replace("\u3000", " ")
     return re.sub(r"\s+", " ", value).strip()
 
 
 def match_key(value: str) -> str:
+    """Create the conservative whitespace-only key used for corpus matching."""
     return re.sub(
         r"\s+", " ", str(value or "").replace("\u3000", " ")
     ).strip()
 
 
 def extract_text(value: str) -> str:
+    """Remove the dataset's user-message prefix from a policy paragraph."""
     value = str(value or "").strip()
     if value.startswith(USER_PREFIX):
         value = value[len(USER_PREFIX) :]
@@ -43,6 +53,7 @@ def extract_text(value: str) -> str:
 
 
 def load_task(folder: str, allowed: tuple[str, ...]) -> tuple[dict[str, dict], dict]:
+    """Load one human-label task and exclude texts with conflicting labels."""
     grouped: dict[str, list[dict]] = defaultdict(list)
     raw_rows = 0
     for split in ("train", "validation"):
@@ -96,11 +107,13 @@ def load_task(folder: str, allowed: tuple[str, ...]) -> tuple[dict[str, dict], d
 
 
 def parse_year(value: str) -> int | None:
+    """Extract a four-digit leading year from issue-date metadata."""
     found = re.match(r"^\s*(\d{4})", str(value or ""))
     return int(found.group(1)) if found else None
 
 
 def period_for_year(year: int) -> str | None:
+    """Map an eligible year to the preregistered recent or earlier period."""
     if 2013 <= year <= 2023:
         return "recent"
     if 1979 <= year <= 2012:
@@ -109,6 +122,7 @@ def period_for_year(year: int) -> str | None:
 
 
 def attach_metadata(rows: dict[str, dict]) -> tuple[dict[str, dict], dict]:
+    """Join human-labeled text to full-corpus metadata with DuckDB."""
     connection = duckdb.connect()
     connection.execute("SET enable_progress_bar=false")
     connection.execute("CREATE TEMP TABLE target_keys(match_key VARCHAR PRIMARY KEY)")
@@ -138,6 +152,8 @@ def attach_metadata(rows: dict[str, dict]) -> tuple[dict[str, dict], dict]:
     result = connection.execute(query, [str(FULL_CORPUS)]).fetchall()
     connection.close()
 
+    # Multiple matches are accepted only when all belong to the same period.
+    # Cross-period matches are excluded because their time label is ambiguous.
     candidates: dict[str, list[dict]] = defaultdict(list)
     for (
         document_id,
@@ -215,6 +231,7 @@ def choose_random_examples(
     used_documents: set[str],
     rng: random.Random,
 ) -> list[dict]:
+    """Sample recent train examples without reusing texts or documents."""
     selected: list[dict] = []
     for label in labels:
         candidates = [
@@ -275,6 +292,7 @@ FIELDS = [
 
 
 def write_csv(path: Path, rows: list[dict]) -> None:
+    """Write dictionaries as UTF-8 CSV using a stable public schema."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=FIELDS, extrasaction="ignore")
@@ -283,10 +301,12 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def sha256(path: Path) -> str:
+    """Return an uppercase SHA-256 digest for a local file."""
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def main() -> None:
+    """Create prompt examples, evaluation rows, reports, and frozen hashes."""
     protocol = json.loads((PROJECT / "config" / "protocol.json").read_text("utf-8"))
     rng = random.Random(protocol["seed"])
 
@@ -339,6 +359,8 @@ def main() -> None:
 
     evaluation: list[dict] = []
     excluded_prompt_document_rows = 0
+    # Build the census only after removing every prompt text and every row from
+    # a source document represented in the prompt.
     for norm in sorted(attached):
         meta = attached[norm]
         if meta["content_id"] in used_content or meta["document_id"] in used_documents:

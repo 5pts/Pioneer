@@ -1,3 +1,10 @@
+"""Validate the frozen CAPC-CG evaluation inputs before any API calls.
+
+The audit checks class balance, time boundaries, unique identifiers, prompt/test
+separation, and the hashes recorded during data preparation. It writes a small
+machine-readable PASS report that ``run.py`` requires before prediction.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -12,15 +19,18 @@ DATA = PROJECT / "data" / "processed"
 
 
 def read_csv(name: str) -> list[dict]:
+    """Read one UTF-8 CSV from the private processed-data directory."""
     with (DATA / name).open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
 def sha256(path: Path) -> str:
+    """Return an uppercase SHA-256 digest for a local file."""
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def main() -> None:
+    """Run every pre-execution integrity check and write the audit report."""
     protocol = json.loads((PROJECT / "config" / "protocol.json").read_text("utf-8"))
     frozen = json.loads(
         (PROJECT / "config" / "frozen_manifest.json").read_text("utf-8")
@@ -34,6 +44,7 @@ def main() -> None:
     for relative, expected in frozen["sha256"].items():
         assert sha256(PROJECT / relative) == expected, relative
 
+    # Enforce the preregistered prompt balance before any model is called.
     assert Counter(row["gold_label"] for row in level1) == {
         label: protocol["level1_few_shot_per_label"]
         for label in ("W", "R", "N")
@@ -50,6 +61,7 @@ def main() -> None:
 
     assert len(evaluation) == len({row["sample_id"] for row in evaluation})
     assert [row["sample_id"] for row in evaluation] == frozen["evaluation_ids"]
+    # Exclude both exact text overlap and shared-document leakage.
     assert not (
         {row["content_id"] for row in examples}
         & {row["content_id"] for row in evaluation}
@@ -58,6 +70,7 @@ def main() -> None:
         {row["document_id"] for row in examples}
         & {row["document_id"] for row in evaluation}
     )
+    # Validate time bins and the official two-stage label relationships.
     for row in evaluation:
         year = int(row["year"])
         if row["period"] == "recent":

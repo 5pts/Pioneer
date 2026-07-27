@@ -1,3 +1,5 @@
+"""Unit tests for classification metrics and label standardization."""
+
 from __future__ import annotations
 
 import sys
@@ -12,6 +14,7 @@ from evaluate import classification_metrics  # noqa: E402
 
 
 class MetricsTests(unittest.TestCase):
+    """Check core metric behavior on small, transparent examples."""
     def test_perfect(self) -> None:
         rows = [
             {"gold": "B", "prediction": "B"},
